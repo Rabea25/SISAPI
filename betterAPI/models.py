@@ -41,11 +41,12 @@ class Course(models.Model):
 class AcademicYear(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="academic_years")
     yearName = models.CharField(max_length=10)
-
+    yearId = models.AutoField(primary_key=True)
     def __str__(self):
         return f"{self.student.nameEn} - {self.yearName}"
 
 class Semester(models.Model):
+    semesterId = models.AutoField(primary_key=True)
     academicYear = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name="semesters")
     courses = models.ManyToManyField(Course, blank=True, related_name='semesters')
     semesterNameOptions = [
