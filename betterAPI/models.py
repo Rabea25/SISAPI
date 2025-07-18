@@ -1,5 +1,6 @@
 from django.db import models
-from django.core.validators import MaxValueValidator, MinLengthValidator, MaxLengthValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator, MinLengthValidator, MaxLengthValidator
 
 class Student(models.Model):
     nameAr = models.CharField(max_length=200, blank=False)
@@ -124,22 +125,18 @@ class TimeSlot(models.Model):
     sessionType = models.CharField(max_length=3, choices=SESSION_TYPE_CHOICES, default='LEC')
 
     DAY_CHOICES = [
-        (0, 'Sunday'),
-        (1, 'Monday'),
-        (2, 'Tuesday'),
-        (3, 'Wednesday'),
-        (4, 'Thursday'),
+        (0, 'Saturday'),
+        (1, 'Sunday'),
+        (2, 'Monday'),
+        (3, 'Tuesday'),
+        (4, 'Wednesday'),
+        (5, 'Thursday'),
     ]
     day = models.PositiveSmallIntegerField(choices=DAY_CHOICES)
 
-    startTime = models.TimeField()
-    endTime = models.TimeField()
-    
+    startPeriod = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)], default=1)
+    endPeriod = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)], default=1)
+
     location = models.CharField(max_length=100, blank=True, null=True, help_text="e.g., 'Room 301' or 'Online'")
 
-    class Meta:
-        ordering = ['day', 'startTime']
-        unique_together = [['enrollment', 'day', 'startTime']]
-
-    def __str__(self):
-        return f"{self.enrollment.course.courseCode} {self.get_sessionType_display()} on {self.get_day_display()} at {self.startTime}"
+    
