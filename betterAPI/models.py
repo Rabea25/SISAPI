@@ -8,6 +8,7 @@ class Student(models.Model):
     studentId = models.CharField(max_length=5, unique=True, blank=False, null=False, primary_key=True)
     level = models.SmallIntegerField(default=0, blank=True, null=False, validators=[MaxValueValidator(4)])
     earnedHours = models.SmallIntegerField(default=0, blank=True, null=False)
+    department = models.ForeignKey('Department', on_delete=models.CASCADE, related_name='students')
     statusChoices = [
         ('active', 'Active'),
         ('inactive', 'Inactive'),
@@ -30,6 +31,7 @@ class Course(models.Model):
     description = models.TextField(blank=True, null=True)
     prerequisites = models.ManyToManyField('self', blank=True, symmetrical=False)
     level = models.SmallIntegerField(default=0, blank=True, null=False)
+    departments = models.ManyToManyField('Department', related_name='courses', help_text="Departments that can access this course")
     typeChoices = [
         ('core', 'Core'),
         ('specialization', 'Specialization'),
@@ -94,47 +96,82 @@ class Educator(models.Model):
         return f"{self.nameAr} / {self.nameEn}"
 
 class Registration(models.Model):
+    """
+    A course offering in a semester. Students can register for this.
+    """
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='registrations')
-    educators = models.ManyToManyField(Educator, blank=True, related_name='registrations')
-    
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='registrations')
+    level = models.SmallIntegerField(validators=[MinValueValidator(0), MaxValueValidator(4)])
+    group_number = models.PositiveIntegerField(help_text="Group within the level (1, 2, 3, etc.)")
+    capacity = models.PositiveIntegerField(default=60)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = [['course', 'semester', 'level', 'group_number']]
+
     def __str__(self):
-        return f"Registration for {self.course.courseName} ({self.course.courseCode})"
+        return f"{self.course.courseCode} - Level {self.level} Group {self.group_number} ({self.semester})"
+
+class SchedulePattern(models.Model):
+    """
+    A selectable component within a registration (like "Tutorial 1", "Lab A", "Main Lecture").
+    Students select one or more patterns when enrolling.
+    """
+    registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name='patterns')
+    pattern_name = models.CharField(max_length=100, help_text="e.g., 'Tutorial 1', 'Lab Section A', 'Main Lecture'")
+    pattern_type = models.CharField(
+        max_length=3,
+        choices=[('LEC', 'Lecture'), ('LAB', 'Lab'), ('TUT', 'Tutorial')],
+        default='LEC'
+    )
+    capacity = models.PositiveIntegerField(default=30)
+
+    
+    class Meta:
+        unique_together = [['registration', 'pattern_name']]
+
+    def __str__(self):
+        return f"{self.registration.course.courseCode} - {self.pattern_name}"
 
 class TimeSlot(models.Model):
     """
-    Represents a single, recurring session for an enrolled course.
-    e.g., a lecture, lab, or tutorial.
+    A specific time period for a schedule pattern.
+    A pattern can have multiple time slots (e.g., a lecture on Sun + Tue).
     """
-
-    registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name='time_slots')
+    pattern = models.ForeignKey(SchedulePattern, on_delete=models.CASCADE, related_name='time_slots')
     educator = models.ForeignKey(Educator, on_delete=models.CASCADE, related_name='time_slots', blank=True, null=True)
-
-    SESSION_TYPE_CHOICES = [
-        ('LEC', 'Lecture'),
-        ('LAB', 'Lab'),
-        ('TUT', 'Tutorial'),
-    ]
-    sessionType = models.CharField(max_length=3, choices=SESSION_TYPE_CHOICES, default='LEC')
-
+    
     DAY_CHOICES = [
-        (0, 'Saturday'),
-        (1, 'Sunday'),
-        (2, 'Monday'),
-        (3, 'Tuesday'),
-        (4, 'Wednesday'),
-        (5, 'Thursday'),
+        (0, 'Saturday'), (1, 'Sunday'), (2, 'Monday'),
+        (3, 'Tuesday'), (4, 'Wednesday'), (5, 'Thursday'),
     ]
     day = models.PositiveSmallIntegerField(choices=DAY_CHOICES)
+    start_period = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
+    end_period = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
+    location = models.CharField(max_length=100, blank=True, null=True)
 
-    startPeriod = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)], default=1)
-    endPeriod = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)], default=1)
+    class Meta:
+        ordering = ['day', 'start_period']
+        unique_together = [['pattern', 'day', 'start_period']]
 
-    location = models.CharField(max_length=100, blank=True, null=True, help_text="e.g., 'Room 301' or 'Online'")
+    def __str__(self):
+        return f"{self.pattern.pattern_name} - {self.get_day_display()} P{self.start_period}-{self.end_period}"
+
+    def clean(self):
+        if self.start_period and self.end_period and self.end_period < self.start_period:
+            raise ValidationError("End period cannot be earlier than start period.")
 
 class Enrollment(models.Model):
+    """
+    A student's enrollment in a specific registration.
+    The selected_patterns field contains the student's choices.
+    """
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='enrollments')
-    registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name='enrollments', blank=True, null=True)
-    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='enrollments', blank=True, null=True)
+    registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name='enrollments')
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='enrollments')
+    selected_patterns = models.ManyToManyField(SchedulePattern, related_name='enrollments')
+    
+    # Grade fields
     letterGrade = models.CharField(max_length=2, blank=True, null=True)
     numericGrade = models.DecimalField(max_digits=3, decimal_places=2, default=0.0, blank=True, null=True)
     courseworkMax = models.SmallIntegerField(default=50, blank=True, null=True)
@@ -143,8 +180,15 @@ class Enrollment(models.Model):
     exam = models.SmallIntegerField(default=0, blank=True, null=True)
     total = models.SmallIntegerField(default=0, blank=True, null=True)
 
+    class Meta:
+        unique_together = [['student', 'registration']]
+
     def __str__(self):
-        return f"{self.student.nameEn} - {self.course.courseCode} ({self.semester.semesterName})"
+        return f"{self.student.nameEn} - {self.registration.course.courseCode}"
+    
+    def get_all_time_slots(self):
+        """Returns all time slots for this enrollment's selected patterns."""
+        return TimeSlot.objects.filter(pattern__in=self.selected_patterns.all())
 
 
 

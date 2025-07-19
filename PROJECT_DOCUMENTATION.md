@@ -1,213 +1,438 @@
-# University SIS API Documentation
+# University Student Information System (SIS) API
 
-## Project Overview
-**Project Name:** BetterEEH - University Student Information System API  
-**Framework:** Django REST Framework  
-**Database:** SQLite (Development)  
-**Created:** July 16, 2025  
+[![Django](https://img.shields.io/badge/Django-5.2-092E20?style=flat&logo=django)](https://djangoproject.com/)
+[![DRF](https://img.shields.io/badge/DRF-3.15-ff1709?style=flat)](https://www.django-rest-framework.org/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776ab?style=flat&logo=python)](https://python.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-3.45-003B57?style=flat&logo=sqlite)](https://sqlite.org/)
 
-### Purpose
-Building a comprehensive API-first Student Information System to handle:
-- Student registration and management
-- Subject/Course management
-- Grade tracking and reporting
-- Timetable scheduling
-- Academic records
+## 🎯 Project Overview
 
----
+**BetterEEH** is a comprehensive, API-first Student Information System designed to modernize university academic management. Built with Django REST Framework, it provides a robust foundation for student registration, course management, grading, and academic record tracking.
 
-## Project Structure
+### 🏗️ System Architecture
 
-```
-betterEEH/API/
-├── db.sqlite3              # SQLite database
-├── manage.py               # Django management script
-├── Pipfile                 # Python dependencies
-├── Pipfile.lock           # Locked dependencies
-├── API/                   # Main project directory
-│   ├── __init__.py
-│   ├── settings.py        # Project settings
-│   ├── urls.py           # Main URL configuration
-│   ├── wsgi.py           # WSGI application
-│   └── asgi.py           # ASGI application
-└── betterAPI/            # Main app directory
-    ├── __init__.py
-    ├── admin.py          # Django admin configuration
-    ├── apps.py           # App configuration
-    ├── models.py         # Database models
-    ├── views.py          # API views
-    ├── urls.py           # App URL patterns
-    ├── tests.py          # Unit tests
-    └── migrations/       # Database migrations
+```mermaid
+graph TB
+    A[Frontend Applications] --> B[Django REST Framework API]
+    B --> C[Business Logic Layer]
+    C --> D[Data Access Layer]
+    D --> E[SQLite Database]
+    
+    F[Authentication Service] --> B
+    G[Permission System] --> B
+    H[Validation Layer] --> C
 ```
 
----
+### 🎯 Core Features
 
-## Current Configuration
-
-### Installed Apps
-- `django.contrib.admin`
-- `django.contrib.auth`
-- `django.contrib.contenttypes`
-- `django.contrib.sessions`
-- `django.contrib.messages`
-- `django.contrib.staticfiles`
-- `rest_framework`
-- `API` (main app)
-
-### Database
-- **Engine:** SQLite3
-- **Location:** `BASE_DIR / 'db.sqlite3'`
+- **📚 Academic Management**: Course offerings, prerequisites, and scheduling
+- **👥 Student Lifecycle**: Registration, enrollment, and academic progression
+- **🎓 Grading System**: Comprehensive grade tracking and GPA calculation
+- **📅 Schedule Management**: Flexible timetabling with conflict detection
+- **🏢 Department Structure**: Multi-departmental course sharing and access control
+- **🔐 Authentication & Authorization**: JWT-based security with role-based permissions
 
 ---
 
-## Models Documentation
+## 📋 Table of Contents
 
-### Implemented Models
+- [Quick Start](#-quick-start)
+- [System Architecture](#️-system-architecture-1)
+- [Database Schema](#-database-schema)
+- [API Documentation](#-api-documentation)
+- [Development Guide](#-development-guide)
+- [Testing Strategy](#-testing-strategy)
+- [Deployment](#-deployment)
+- [Contributing](#-contributing)
 
-Here are the current models implemented in `betterAPI/models.py`.
+---
 
-#### 1. `Student`
-Represents a single student, storing their ID, names, and academic status.
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- pip or pipenv
+- Git
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/betterEEH.git
+cd betterEEH/API
+
+# Create virtual environment
+pipenv install  # or pip install -r requirements.txt
+
+# Activate environment
+pipenv shell
+
+# Apply database migrations
+python manage.py migrate
+
+# Create superuser
+python manage.py createsuperuser
+
+# Start development server
+python manage.py runserver
+```
+
+### Environment Configuration
+
+```bash
+# .env file (create in project root)
+DEBUG=True
+SECRET_KEY=your-secret-key-here
+DATABASE_URL=sqlite:///db.sqlite3
+ALLOWED_HOSTS=localhost,127.0.0.1
+```
+
+---
+
+## 🏗️ System Architecture
+
+### Technology Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **API Framework** | Django REST Framework 3.15+ | RESTful API development |
+| **Backend** | Django 5.2+ | Web framework and ORM |
+| **Database** | SQLite (dev) / PostgreSQL (prod) | Data persistence |
+| **Authentication** | JWT (djangorestframework-simplejwt) | Stateless authentication |
+| **Validation** | Django Validators + Custom | Data integrity |
+| **Testing** | Django Test Framework + pytest | Quality assurance |
+
+### Design Principles
+
+1. **API-First Design**: All functionality exposed through well-documented APIs
+2. **Separation of Concerns**: Clear distinction between models, views, and business logic
+3. **Scalability**: Designed to handle growing student populations and course offerings
+4. **Flexibility**: Configurable to adapt to different university structures
+5. **Security**: Built-in authentication, authorization, and data validation
+
+---
+
+## 🗄️ Database Schema
+
+### Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    Student ||--o{ AcademicYear : has
+    Student }o--|| Department : belongs_to
+    AcademicYear ||--o{ Semester : contains
+    Course }o--o{ Department : available_to
+    Course ||--o{ Registration : offered_as
+    Registration }o--|| Semester : scheduled_in
+    Registration ||--o{ SchedulePattern : composed_of
+    SchedulePattern ||--o{ TimeSlot : scheduled_at
+    Student ||--o{ Enrollment : creates
+    Enrollment }o--|| Registration : enrolls_in
+    Enrollment }o--o{ SchedulePattern : selects
+    Educator }o--|| Department : works_in
+    Educator ||--o{ TimeSlot : teaches
+```
+
+### Core Models Documentation
+
+#### 1. Student Model
+
+**Purpose**: Central entity representing university students with comprehensive academic and personal information.
 
 ```python
 class Student(models.Model):
-    nameAr = models.CharField(max_length=200)
-    nameEn = models.CharField(max_length=200)
-    studentId = models.CharField(max_length=5, unique=True, blank=False, null=False, primary_key=True)
-    level = models.SmallIntegerField(default=0, blank=True, null=True)
-    earnedHours = models.SmallIntegerField(default=0, blank=True, null=True)
-    statusChoices = [
-        ('active', 'Active'),
-        ('inactive', 'Inactive'),
-        ('graduated', 'Graduated'),
-    ]
-    status = models.CharField(choices=statusChoices, max_length=10, default='active', blank=True, null=True)
+    """
+    Represents a university student with academic and personal information.
+    
+    Primary Key: studentId (5-character unique identifier)
+    
+    Business Rules:
+    - Student ID must be exactly 5 characters
+    - National ID must be exactly 14 characters
+    - Level ranges from 0-4 (0=Preparatory, 1-4=Academic levels)
+    - Status transitions: active -> inactive/graduated
+    """
+    
+    # Identity Fields
+    nameAr = models.CharField(max_length=200, blank=False)
+    nameEn = models.CharField(max_length=200, blank=False) 
+    studentId = models.CharField(max_length=5, unique=True, primary_key=True)
+    nationalId = models.CharField(max_length=14, unique=True, validators=[...])
+    
+    # Academic Fields
+    level = models.SmallIntegerField(default=0, validators=[MaxValueValidator(4)])
+    earnedHours = models.SmallIntegerField(default=0)
+    department = models.ForeignKey('Department', on_delete=models.CASCADE)
+    
+    # Status & Contact
+    status = models.CharField(choices=STATUS_CHOICES, max_length=10, default='active')
     email = models.EmailField(max_length=254, blank=True, null=True)
     phone = models.CharField(max_length=15, blank=True, null=True)
-    dateOfBirth = models.DateField(blank=True, null=True)
-    address = models.CharField(max_length=255, blank=True, null=True)
+    dateOfBirth = models.DateField()
+    address = models.CharField(max_length=255)
 ```
 
-#### 2. `Course`
-Represents a general course offered by the university.
+**Key Relationships**:
+- `department` → Many students belong to one department
+- `academic_years` → One student has multiple academic years
+- `enrollments` → One student has multiple course enrollments
+
+**Constraints**:
+- `studentId`: Unique, exactly 5 characters
+- `nationalId`: Unique, exactly 14 characters
+- `level`: 0-4 range validation
+
+---
+
+#### 2. Course Model
+
+**Purpose**: Represents academic courses with prerequisites, departmental access, and metadata.
 
 ```python
 class Course(models.Model):
+    """
+    Academic course definition with prerequisites and departmental associations.
+    
+    Primary Key: courseCode (6-character unique identifier)
+    
+    Business Rules:
+    - Course codes must be unique across the system
+    - Prerequisites form a directed acyclic graph (no circular dependencies)
+    - Courses can be shared across multiple departments
+    - Level indicates academic complexity (0-4)
+    """
+    
+    # Core Information
     courseName = models.CharField(max_length=200)
-    courseCode = models.CharField(max_length=6, unique=True, blank=False, null=False, primary_key=True)
-    credits = models.SmallIntegerField(default=3, blank=True, null=True)
+    courseCode = models.CharField(max_length=6, unique=True, primary_key=True)
+    credits = models.SmallIntegerField(default=3)
     description = models.TextField(blank=True, null=True)
+    
+    # Academic Structure
+    level = models.SmallIntegerField(default=0)
+    type = models.CharField(choices=TYPE_CHOICES, max_length=15, default='core')
+    
+    # Relationships
     prerequisites = models.ManyToManyField('self', blank=True, symmetrical=False)
-    level = models.SmallIntegerField(default=0, blank=True, null=True)
-    typeChoices = [
-        ('core', 'Core'),
-        ('specialization', 'Specialization'),
-    ]
-    type = models.CharField(choices=typeChoices, max_length=15, default='core', blank=True, null=True)
+    departments = models.ManyToManyField('Department', related_name='courses')
 ```
 
-#### 3. `AcademicYear`
-Represents an academic year for a specific student.
+**Key Relationships**:
+- `prerequisites` → Self-referential many-to-many for course dependencies
+- `departments` → Many-to-many allowing cross-departmental courses
+- `registrations` → One course can have multiple semester offerings
+
+**Business Logic**:
+- Prerequisites validation prevents circular dependencies
+- Department association controls student access
+- Course type affects graduation requirements
+
+---
+
+#### 3. Registration Model
+
+**Purpose**: Represents a specific offering of a course in a semester with enrollment groups.
 
 ```python
-class AcademicYear(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="academic_years")
-    yearName = models.CharField(max_length=10)
+class Registration(models.Model):
+    """
+    A specific offering of a course in a semester.
+    
+    Unique Constraint: (course, semester, level, group_number)
+    
+    Business Rules:
+    - One course can have multiple registrations per semester (different groups)
+    - Level and group_number organize students for scheduling
+    - Capacity limits total enrollment
+    - Active/inactive status controls availability
+    """
+    
+    # Core References
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
+    
+    # Organization
+    level = models.SmallIntegerField(validators=[MinValueValidator(0), MaxValueValidator(4)])
+    group_number = models.PositiveIntegerField()
+    
+    # Enrollment Management
+    capacity = models.PositiveIntegerField(default=60)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        unique_together = [['course', 'semester', 'level', 'group_number']]
 ```
 
-#### 4. `Semester`
-Represents a specific semester within an academic year.
+**Key Features**:
+- **Flexible Grouping**: Students can register across groups if slots available
+- **Capacity Management**: Prevents over-enrollment
+- **Level Organization**: Supports academic progression tracking
+
+---
+
+#### 4. SchedulePattern Model
+
+**Purpose**: Defines selectable scheduling components within a registration (lectures, labs, tutorials).
 
 ```python
-class Semester(models.Model):
-    academicYear = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name="semesters")
-    courses = models.ManyToManyField(Course, blank=True, related_name='semesters')
-    semesterNameOptions = [
-        ('fall', 'Fall'),
-        ('spring', 'Spring'),
-        ('summer', 'Summer'),
-    ]
-    semesterName = models.CharField(choices=semesterNameOptions, max_length=10, default='fall', blank=True, null=True)
-    gpa = models.DecimalField(max_digits=3, decimal_places=2, default=0.0, blank=True, null=True)
-    cgpa = models.DecimalField(max_digits=3, decimal_places=2, default=0.0, blank=True, null=True)
-    registeredHours = models.SmallIntegerField(default=0, blank=True, null=True)
-    earnedHours = models.SmallIntegerField(default=0, blank=True, null=True)
+class SchedulePattern(models.Model):
+    """
+    A selectable component of a course registration.
+    
+    Examples: "Main Lecture", "Tutorial Group 1", "Lab Section A"
+    
+    Business Rules:
+    - Students must select patterns to complete enrollment
+    - Each pattern has independent capacity limits
+    - Pattern types determine academic requirements
+    """
+    
+    registration = models.ForeignKey(Registration, on_delete=models.CASCADE)
+    pattern_name = models.CharField(max_length=100)
+    pattern_type = models.CharField(choices=PATTERN_CHOICES, max_length=3)
+    capacity = models.PositiveIntegerField(default=30)
+    
+    class Meta:
+        unique_together = [['registration', 'pattern_name']]
 ```
 
-#### 5. `Department`
-Represents an academic department.
+**Pattern Types**:
+- `LEC` (Lecture): Usually mandatory, larger capacity
+- `LAB` (Laboratory): Hands-on sessions, smaller capacity  
+- `TUT` (Tutorial): Discussion groups, smallest capacity
+
+---
+
+#### 5. TimeSlot Model
+
+**Purpose**: Specific time periods for schedule patterns with educator and location assignment.
 
 ```python
-class Department(models.Model):
-    name = models.CharField(max_length=100, unique=True, blank=False, null=False)
-    desc = models.TextField(blank=True, null=True)
+class TimeSlot(models.Model):
+    """
+    A specific time period for a schedule pattern.
+    
+    Business Rules:
+    - Patterns can have multiple time slots (e.g., lecture on Sun + Tue)
+    - Time periods are numbered 1-12 representing university schedule
+    - Conflict detection prevents overlapping enrollments
+    - Each slot can have different educators
+    """
+    
+    pattern = models.ForeignKey(SchedulePattern, on_delete=models.CASCADE)
+    educator = models.ForeignKey(Educator, on_delete=models.CASCADE, blank=True)
+    
+    # Timing
+    day = models.PositiveSmallIntegerField(choices=DAY_CHOICES)  # 0=Sat, 5=Thu
+    start_period = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
+    end_period = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
+    
+    # Location
+    location = models.CharField(max_length=100, blank=True, null=True)
+    
+    class Meta:
+        ordering = ['day', 'start_period']
+        unique_together = [['pattern', 'day', 'start_period']]
+    
+    def clean(self):
+        """Validates that end_period > start_period"""
+        if self.start_period and self.end_period and self.end_period < self.start_period:
+            raise ValidationError("End period cannot be earlier than start period.")
 ```
 
-#### 6. `Educator`
-Represents an educator or instructor.
+**Time System**:
+- **Days**: Saturday (0) through Thursday (5) - Middle Eastern academic week
+- **Periods**: 1-12 representing time slots throughout the day
+- **Validation**: Ensures logical time ordering and prevents conflicts
 
-```python
-class Educator(models.Model):
-    nameAr = models.CharField(max_length=200)
-    nameEn = models.CharField(max_length=200)
-    educatorId = models.CharField(max_length=5, unique=True, blank=False, null=False, primary_key=True)
-    email = models.EmailField(max_length=254, blank=True, null=True)
-    phone = models.CharField(max_length=15, blank=True, null=True)
-    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='educators', blank=True, null=True)
-```
+---
 
-#### 7. `Enrollment`
-Links a student, a course, and an educator for a specific semester, and holds grade information.
+#### 6. Enrollment Model
+
+**Purpose**: Links students to registrations with their selected schedule patterns and academic records.
 
 ```python
 class Enrollment(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='enrollments')
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')
-    educator = models.ForeignKey(Educator, on_delete=models.CASCADE, related_name='enrollments', blank=True, null=True)
-    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='enrollments', blank=True, null=True)
+    """
+    Student enrollment in a specific course registration.
+    
+    Business Rules:
+    - One student can only enroll in one registration per course per semester
+    - Students must select schedule patterns to complete enrollment
+    - Grade tracking throughout semester progression
+    - Academic record maintenance
+    """
+    
+    # Core Relationships
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    registration = models.ForeignKey(Registration, on_delete=models.CASCADE)
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
+    
+    # Schedule Selection
+    selected_patterns = models.ManyToManyField(SchedulePattern, related_name='enrollments')
+    
+    # Academic Records
     letterGrade = models.CharField(max_length=2, blank=True, null=True)
-    numericGrade = models.DecimalField(max_digits=3, decimal_places=2, default=0.0, blank=True, null=True)
-    courseworkMax = models.SmallIntegerField(default=50, blank=True, null=True)
-    coursework = models.SmallIntegerField(default=0, blank=True, null=True)
-    examMax = models.SmallIntegerField(default=50, blank=True, null=True)
-    exam = models.SmallIntegerField(default=0, blank=True, null=True)
-    total = models.SmallIntegerField(default=0, blank=True, null=True)
+    numericGrade = models.DecimalField(max_digits=3, decimal_places=2, default=0.0)
+    
+    # Assessment Breakdown
+    courseworkMax = models.SmallIntegerField(default=50)
+    coursework = models.SmallIntegerField(default=0)
+    examMax = models.SmallIntegerField(default=50)  
+    exam = models.SmallIntegerField(default=0)
+    total = models.SmallIntegerField(default=0)
+    
+    class Meta:
+        unique_together = [['student', 'registration']]
+    
+    def get_all_time_slots(self):
+        """Returns all time slots for this enrollment's selected patterns."""
+        return TimeSlot.objects.filter(pattern__in=self.selected_patterns.all())
 ```
 
-#### 8. `Timetable`
-Stores the schedule for a specific enrollment, including day, time periods, and session type.
+**Academic Features**:
+- **Flexible Grading**: Supports various assessment structures
+- **Schedule Assembly**: Combines selected patterns into student timetable
+- **Progress Tracking**: Links to semester and academic year progression
 
+---
+
+### Supporting Models
+
+#### Department Model
 ```python
-class Timetable(models.Model):
-    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, related_name='timetable_sessions')
-    DAY_CHOICES = [
-        ('Sunday', 'Sunday'),
-        ('Monday', 'Monday'),
-        ('Tuesday', 'Tuesday'),
-        ('Wednesday', 'Wednesday'),
-        ('Thursday', 'Thursday'),
-    ]
-    day = models.CharField(max_length=10, choices=DAY_CHOICES)
-    
-    PERIOD_CHOICES = [
-        (1, 'Period 1 (08:00-09:30)'),
-        (2, 'Period 2 (09:45-11:15)'),
-        (3, 'Period 3 (11:30-13:00)'),
-        (4, 'Period 4 (13:15-14:45)'),
-        (5, 'Period 5 (15:00-16:30)'),
-        (6, 'Period 6 (16:45-18:15)'),
-    ]
-    startPeriod = models.PositiveSmallIntegerField(choices=PERIOD_CHOICES)
-    endPeriod = models.PositiveSmallIntegerField(choices=PERIOD_CHOICES)
+class Department(models.Model):
+    """Academic department with unique code and description."""
+    name = models.CharField(max_length=100, unique=True)
+    desc = models.TextField(blank=True, null=True)
+    code = models.CharField(max_length=3, unique=True, primary_key=True)
+```
 
-    SESSION_TYPE_CHOICES = [
-        ('lecture', 'Lecture'),
-        ('lab', 'Lab'),
-        ('tutorial', 'Tutorial'),
-    ]
-    sessionType = models.CharField(max_length=10, choices=SESSION_TYPE_CHOICES, default='lecture')
-    location = models.CharField(max_length=100, blank=True, null=True)
+#### Educator Model  
+```python
+class Educator(models.Model):
+    """University faculty and staff with departmental association."""
+    nameAr = models.CharField(max_length=200)
+    nameEn = models.CharField(max_length=200)
+    educatorId = models.CharField(max_length=5, unique=True, primary_key=True)
+    type = models.CharField(choices=TYPE_CHOICES, max_length=30, default='Lecturer')
+    department = models.ForeignKey(Department, on_delete=models.CASCADE)
+```
+
+#### AcademicYear & Semester Models
+```python
+class AcademicYear(models.Model):
+    """Student's academic year progression."""
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    yearName = models.CharField(max_length=10)
+
+class Semester(models.Model):
+    """Semester within an academic year with GPA tracking."""
+    academicYear = models.ForeignKey(AcademicYear, on_delete=models.CASCADE)
+    semesterName = models.CharField(choices=SEMESTER_CHOICES, max_length=10)
+    gpa = models.DecimalField(max_digits=3, decimal_places=2, default=0.0)
+    cgpa = models.DecimalField(max_digits=3, decimal_places=2, default=0.0)
 ```
 
 ---
