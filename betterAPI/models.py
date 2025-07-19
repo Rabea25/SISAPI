@@ -93,30 +93,22 @@ class Educator(models.Model):
     def __str__(self):
         return f"{self.nameAr} / {self.nameEn}"
 
-class Enrollment(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='enrollments')
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')
-    educator = models.ForeignKey(Educator, on_delete=models.CASCADE, related_name='enrollments', blank=True, null=True)
-    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='enrollments', blank=True, null=True)
-    letterGrade = models.CharField(max_length=2, blank=True, null=True)
-    numericGrade = models.DecimalField(max_digits=3, decimal_places=2, default=0.0, blank=True, null=True)
-    courseworkMax = models.SmallIntegerField(default=50, blank=True, null=True)
-    coursework = models.SmallIntegerField(default=0, blank=True, null=True)
-    examMax = models.SmallIntegerField(default=50, blank=True, null=True)
-    exam = models.SmallIntegerField(default=0, blank=True, null=True)
-    total = models.SmallIntegerField(default=0, blank=True, null=True)
-
+class Registration(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='registrations')
+    educators = models.ManyToManyField(Educator, blank=True, related_name='registrations')
+    
     def __str__(self):
-        return f"{self.student.nameEn} - {self.course.courseCode} ({self.semester.semesterName})"
-
+        return f"Registration for {self.course.courseName} ({self.course.courseCode})"
 
 class TimeSlot(models.Model):
     """
     Represents a single, recurring session for an enrolled course.
     e.g., a lecture, lab, or tutorial.
     """
-    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, related_name='timeslots')
-    
+
+    registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name='time_slots')
+    educator = models.ForeignKey(Educator, on_delete=models.CASCADE, related_name='time_slots', blank=True, null=True)
+
     SESSION_TYPE_CHOICES = [
         ('LEC', 'Lecture'),
         ('LAB', 'Lab'),
@@ -138,5 +130,22 @@ class TimeSlot(models.Model):
     endPeriod = models.SmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)], default=1)
 
     location = models.CharField(max_length=100, blank=True, null=True, help_text="e.g., 'Room 301' or 'Online'")
+
+class Enrollment(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='enrollments')
+    registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name='enrollments', blank=True, null=True)
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='enrollments', blank=True, null=True)
+    letterGrade = models.CharField(max_length=2, blank=True, null=True)
+    numericGrade = models.DecimalField(max_digits=3, decimal_places=2, default=0.0, blank=True, null=True)
+    courseworkMax = models.SmallIntegerField(default=50, blank=True, null=True)
+    coursework = models.SmallIntegerField(default=0, blank=True, null=True)
+    examMax = models.SmallIntegerField(default=50, blank=True, null=True)
+    exam = models.SmallIntegerField(default=0, blank=True, null=True)
+    total = models.SmallIntegerField(default=0, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.student.nameEn} - {self.course.courseCode} ({self.semester.semesterName})"
+
+
 
     

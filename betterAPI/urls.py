@@ -1,16 +1,17 @@
 from django.urls import path
-from .views import EducatorDetailView, EducatorListCreateView, StudentListCreateView, StudentDetailView, CourseListCreateView, CourseDetailView, DepartmentListCreateView, DepartmentDetailView, AcademicYearListCreateView, AcademicYearDetailView, SemesterListCreateView, SemesterDetailView
+from . import views
 urlpatterns = [
-    path('students/', StudentListCreateView.as_view(), name='student-list-create'),
-    path('student/<str:pk>/', StudentDetailView.as_view(), name='student-detail'),
-    path('courses/', CourseListCreateView.as_view(), name='course-list-create'),
-    path('course/<str:pk>/', CourseDetailView.as_view(), name='course-detail'),
-    path('educators/', EducatorListCreateView.as_view(), name='educator-list-create'),
-    path('educator/<str:pk>/', EducatorDetailView.as_view(), name='educator-detail'),
-    path('departments/', DepartmentListCreateView.as_view(), name='department-list-create'),
-    path('department/<str:pk>/', DepartmentDetailView.as_view(), name='department-detail'),
-    path('academic-years/', AcademicYearListCreateView.as_view(), name='academic-year-list-create'),
-    path('academic-year/<str:pk>/', AcademicYearDetailView.as_view(), name='academic-year-detail'),
-    path('semesters/', SemesterListCreateView.as_view(), name='semester-list-create'),
-    path('semester/<str:pk>/', SemesterDetailView.as_view(), name='semester-detail'),
+    path('students/', views.StudentListCreateView.as_view(), name='student-list-create'),
+    path('student/<str:pk>/', views.StudentDetailView.as_view(), name='student-detail'),
+    path('courses/', views.CourseListCreateView.as_view(), name='course-list-create'),
+    path('course/<str:pk>/', views.CourseDetailView.as_view(), name='course-detail'),
+    path('educators/', views.EducatorListCreateView.as_view(), name='educator-list-create'),
+    path('educator/<str:pk>/', views.EducatorDetailView.as_view(), name='educator-detail'),
+    path('departments/', views.DepartmentListCreateView.as_view(), name='department-list-create'),
+    path('department/<str:pk>/', views.DepartmentDetailView.as_view(), name='department-detail'),
+    path('academic-years/', views.AcademicYearListCreateView.as_view(), name='academic-year-list-create'),
+    path('academic-year/<str:pk>/', views.AcademicYearDetailView.as_view(), name='academic-year-detail'),
+    path('semesters/', views.SemesterListCreateView.as_view(), name='semester-list-create'),
+    path('semester/<str:pk>/', views.SemesterDetailView.as_view(), name='semester-detail'),
+    path('user/create/', views.UserCreateView.as_view(), name='user-create'),
 ]
