@@ -5,6 +5,11 @@ from django.core.validators import MaxValueValidator, MinValueValidator, MinLeng
 class Student(models.Model):
     nameAr = models.CharField(max_length=200, blank=False)
     nameEn = models.CharField(max_length=200, blank=False)
+    Gender = models.CharField(choices=[('male' , 'male'), ('female' , 'female')], blank=True, null=True)
+    nationality =  models.CharField(max_length=50, null=True, blank=True)
+    religion = models.CharField(max_length=50, null=True, blank=True)
+    homePhone = models.CharField(max_length=15, null=True, blank=True)
+    zipcode = models.CharField(max_length=20, null=True, blank=True)
     studentId = models.CharField(max_length=5, unique=True, blank=False, null=False, primary_key=True)
     level = models.SmallIntegerField(default=0, blank=True, null=False, validators=[MaxValueValidator(4)])
     earnedHours = models.SmallIntegerField(default=0, blank=True, null=False)
@@ -189,6 +194,63 @@ class Enrollment(models.Model):
     def get_all_time_slots(self):
         """Returns all time slots for this enrollment's selected patterns."""
         return TimeSlot.objects.filter(pattern__in=self.selected_patterns.all())
+
+    def clean(self):
+        """
+        Validates that the student has selected exactly one pattern of each type
+        that exists for this registration.
+        """
+        if not self.pk:
+            # Skip validation for new instances before they're saved
+            return
+            
+        # Get all pattern types available for this registration
+        available_types = self.registration.patterns.values_list('pattern_type', flat=True).distinct()
+        selected_patterns = self.selected_patterns.all()
+        
+        # Check each pattern type
+        for pattern_type in available_types:
+            patterns_of_type = selected_patterns.filter(pattern_type=pattern_type)
+            count = patterns_of_type.count()
+            
+            if count == 0:
+                raise ValidationError(f"You must select exactly one {pattern_type} pattern.")
+            elif count > 1:
+                raise ValidationError(f"You can only select one {pattern_type} pattern, but {count} were selected.")
+    
+    def save(self, *args, **kwargs):
+        # Save the instance first
+        super().save(*args, **kwargs)
+        
+        # Only validate pattern selection if patterns have been set
+        if self.selected_patterns.exists():
+            self.clean()
+
+    def is_complete_enrollment(self):
+        """
+        Returns True if the student has selected exactly one pattern of each 
+        required type for this registration.
+        """
+        try:
+            self.clean()
+            return True
+        except ValidationError:
+            return False
+    
+    def get_missing_pattern_types(self):
+        """
+        Returns a list of pattern types that the student still needs to select.
+        """
+        available_types = self.registration.patterns.values_list('pattern_type', flat=True).distinct()
+        selected_types = self.selected_patterns.values_list('pattern_type', flat=True).distinct()
+        
+        missing_types = []
+        for pattern_type in available_types:
+            selected_count = self.selected_patterns.filter(pattern_type=pattern_type).count()
+            if selected_count == 0:
+                missing_types.append(pattern_type)
+        
+        return missing_types
 
 
 

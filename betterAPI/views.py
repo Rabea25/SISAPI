@@ -5,7 +5,7 @@ from .models import Student, Course, AcademicYear, Semester, Department, Educato
 from . import serializers
 from django.shortcuts import get_object_or_404, render
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
-from .permissions import IsManager
+from .permissions import IsEducator, IsStudent
 from django.contrib.auth.models import User, Group
 
 class StudentListCreateView(generics.ListCreateAPIView):

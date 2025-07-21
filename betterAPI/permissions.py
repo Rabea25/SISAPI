@@ -1,5 +1,9 @@
 from rest_framework.permissions import BasePermission
 
-class IsManager(BasePermission):
+class IsStudent(BasePermission):
     def has_permission(self, request, view):
-        return request.user.groups.filter(name="Manager").exists() or request.user.is_superuser
+        return request.user and request.user.is_authenticated and request.user.role == 'Student'
+
+class IsEducator(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and request.user.role == 'Educator'
