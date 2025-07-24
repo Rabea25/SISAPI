@@ -110,3 +110,34 @@ class UserCreateView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED
         )
 
+class GetCurrentUser(generics.RetrieveAPIView):
+    throttle_classe = [UserRateThrottle, AnonRateThrottle]
+    permission_classes = [IsAuthenticated]
+    def get(self, request, *args, **kwargs):
+        if request.user.is_anonymous:
+            return Response(
+                {'message': 'User is not authenticated'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        if request.user.groups.filter(name='Student'):
+            student = Student.objects.get(studentId=request.user.username)
+            return Response(
+                {"message": "Token is authenticated.", 'id' : student.studentId, 'name' : student.nameEn},
+                status=status.HTTP_200_OK
+            )
+        elif request.user.groups.filter(name='Educator'):
+            educator = Educator.objects.get(educatorId=request.user.username)
+            return Response(
+                {"message": "Token is authenticated.", 'id' : student.studentId, 'name' : student.nameEn},
+                status=status.HTTP_200_OK
+            )
+        elif request.user.is_staff:
+            return Response(
+                {"message": "Token is authenticated."},
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {'message' : 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
