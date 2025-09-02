@@ -2,6 +2,43 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, MinLengthValidator, MaxLengthValidator
 
+class GlobalSettings(models.Model):
+    """
+    Simple singleton model to track current academic year and semester
+    """
+    current_academic_year = models.CharField(max_length=10, help_text="e.g., '2024-2025'")
+    current_semester = models.CharField(
+        max_length=10,
+        choices=[('fall', 'Fall'), ('spring', 'Spring'), ('summer', 'Summer')],
+        default='fall'
+    )
+    registration_open = models.BooleanField(default=False, help_text="Is registration currently open?")
+
+    class Meta:
+        verbose_name = "Global Settings"
+        verbose_name_plural = "Global Settings"
+
+    def save(self, *args, **kwargs):
+        # Ensure only one instance exists
+        if not self.pk and GlobalSettings.objects.exists():
+            raise ValidationError("Only one GlobalSettings instance allowed")
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_current(cls):
+        """Get the current global settings (create if doesn't exist)"""
+        obj, created = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                'current_academic_year': '2024-2025',
+                'current_semester': 'fall'
+            }
+        )
+        return obj
+
+    def __str__(self):
+        return f"AY {self.current_academic_year} - {self.get_current_semester_display()}"
+
 class Student(models.Model):
     nameAr = models.CharField(max_length=200, blank=False)
     nameEn = models.CharField(max_length=200, blank=False)
@@ -102,25 +139,31 @@ class Educator(models.Model):
 
 class Registration(models.Model):
     """
-    A course offering in a semester. Students can register for this.
+    A course offering. Students can register for this.
+    No semester dependency - uses GlobalSettings for current semester.
+    Level comes from the Course itself.
     """
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='registrations')
-    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='registrations')
-    level = models.SmallIntegerField(validators=[MinValueValidator(0), MaxValueValidator(4)])
-    group_number = models.PositiveIntegerField(help_text="Group within the level (1, 2, 3, etc.)")
-    capacity = models.PositiveIntegerField(default=60)
+    group_number = models.PositiveIntegerField(help_text="Group number for this course (1, 2, 3, etc.)")
+    capacity = models.PositiveIntegerField(default=60, help_text="Total capacity for this course group")
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = [['course', 'semester', 'level', 'group_number']]
+        unique_together = [['course', 'group_number']]
 
     def __str__(self):
-        return f"{self.course.courseCode} - Level {self.level} Group {self.group_number} ({self.semester})"
+        return f"{self.course.courseCode} - Group {self.group_number}"
+
+    @property
+    def level(self):
+        """Get level from the course"""
+        return self.course.level
 
 class SchedulePattern(models.Model):
     """
     A selectable component within a registration (like "Tutorial 1", "Lab A", "Main Lecture").
     Students select one or more patterns when enrolling.
+    Pattern capacity should be <= Registration capacity.
     """
     registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name='patterns')
     pattern_name = models.CharField(max_length=100, help_text="e.g., 'Tutorial 1', 'Lab Section A', 'Main Lecture'")
@@ -129,7 +172,7 @@ class SchedulePattern(models.Model):
         choices=[('LEC', 'Lecture'), ('LAB', 'Lab'), ('TUT', 'Tutorial')],
         default='LEC'
     )
-    capacity = models.PositiveIntegerField(default=30)
+    capacity = models.PositiveIntegerField(default=30, help_text="Capacity for this specific section (should be <= registration capacity)")
 
     
     class Meta:
@@ -137,6 +180,12 @@ class SchedulePattern(models.Model):
 
     def __str__(self):
         return f"{self.registration.course.courseCode} - {self.pattern_name}"
+
+    def clean(self):
+        """Validate that pattern capacity doesn't exceed registration capacity"""
+        if self.capacity and self.registration_id:
+            if self.capacity > self.registration.capacity:
+                raise ValidationError(f"Pattern capacity ({self.capacity}) cannot exceed registration capacity ({self.registration.capacity})")
 
 class TimeSlot(models.Model):
     """
@@ -251,6 +300,7 @@ class Enrollment(models.Model):
                 missing_types.append(pattern_type)
         
         return missing_types
+    
 
 
 
