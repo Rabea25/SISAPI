@@ -615,9 +615,163 @@ class StudentRegistrationView(generics.CreateAPIView):
         StudentId = request.user.username
 
         try:
-            student = Student.objects.get(studentId=StudentId).prefetch_related('')
+            student = Student.objects.select_related('department').get(studentId=StudentId)
         except Student.DoesNotExist:
             return Response({'error' : 'student does not exist'}, status=status.HTTP_404_NOT_FOUND)
-        if GlobalSettings.get_current().registration_open == False:
+        
+        global_settings = GlobalSettings.get_current()
+        if not global_settings.registration_open:
             return Response({'error' : 'Registration period is closed'}, status=status.HTTP_403_FORBIDDEN)
         
+        registrations_data = request.data
+        if not isinstance(registrations_data, list) or not registrations_data:
+            return Response({'error': 'Invalid data format. Expected a non-empty list of registrations.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        successful = []
+        failed = []
+
+        for reg_data in registrations_data:
+            try: 
+                result = self.process_registration(student, reg_data, global_settings)
+                successful.append(result)
+            except Exception as e:
+                failed.append({'registration': reg_data.get('registrationId'), 'error': str(e)})
+
+        return Response({
+            'successful': successful,
+            'failed': failed
+        }, status=status.HTTP_200_OK)
+    
+    def process_registration(self, student, reg_data, global_settings):
+        reg_id = reg_data.get('registrationId')
+        pattern_data = reg_data.get('schedulePatterns', [])
+        pattern_ids = [pattern.get('patternId') for pattern in pattern_data]
+
+        try:
+            registration = Registration.objects.get(id=reg_id, is_active=True)
+        except Registration.DoesNotExist:
+            raise Exception("Registration not found or inactive")
+        
+        
+        
+
+        
+        academic_year, created = AcademicYear.objects.get_or_create(student=student, yearName=global_settings.current_academic_year)
+        semester, created = Semester.objects.get_or_create(academicYear=academic_year, semesterName=global_settings.current_semester)
+        
+        if not pattern_ids:
+            try:
+                enrollment = Enrollment.objects.get(
+                    student=student,
+                    registration=registration,
+                    semester=semester
+                )
+                enrollment.delete()
+                # Update semester registered hours after deletion
+                self.update_semester_registered_hours(semester, student)
+                return {
+                    'registrationId': reg_id,
+                    'courseCode': registration.course.courseCode,
+                    'action': 'deleted'
+                }
+            except Enrollment.DoesNotExist:
+                return {
+                    'registrationId': reg_id,
+                    'courseCode': registration.course.courseCode,
+                    'action': 'no_change'
+                }
+        
+        enrollment, created = Enrollment.objects.get_or_create(
+            student=student,
+            registration=registration,
+            semester=semester 
+        )
+
+        patterns = SchedulePattern.objects.filter(id__in=pattern_ids, registration=registration).prefetch_related('enrollments')
+        if patterns.count() != len(pattern_ids):
+            raise Exception("Some patterns do not belong to this Registration")
+
+        for pattern in patterns: 
+            if pattern.enrollments.count() >= pattern.capacity:
+                raise Exception(f"Pattern '{pattern.pattern_name}' is full ({pattern.enrollments.count()}/{pattern.capacity})")
+
+        pattern_types = [pattern.pattern_type for pattern in patterns]
+        if len(pattern_types) != len(set(pattern_types)):
+            raise Exception("Cannot select multiple patterns of the same type (e.g., 2 tutorials)")
+
+        enrollment.selected_patterns.set(patterns)
+        enrollment.save()
+        
+        # Update semester registered hours after enrollment changes
+        self.update_semester_registered_hours(semester, student)
+
+        return {
+            'registrationId' : reg_id,
+            'courseCode' : registration.course.courseCode,
+            'enrollmentId' : enrollment.id,
+            'action' : 'created' if created else 'updated'
+        }
+    
+    def update_semester_registered_hours(self, semester, student):
+        
+        from django.db.models import Sum
+        
+        total_hours = Enrollment.objects.filter(
+            student=student,
+            semester=semester
+        ).aggregate(
+            total=Sum('registration__course__credits')
+        )['total'] or 0
+        
+        semester.registeredHours = total_hours
+        semester.save(update_fields=['registeredHours'])
+
+
+class StudentTimetableView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        student_id = request.user.username
+
+        try:
+            student = Student.objects.get(studentId=student_id)
+        except Student.DoesNotExist:
+            return Response({"detail": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+
+        global_settings = GlobalSettings.get_current()
+        enrollments = Enrollment.objects.filter(
+            student=student,
+            semester__academicYear__yearName=global_settings.current_academic_year,
+            semester__semesterName=global_settings.current_semester
+        ).select_related(
+            'registration__course'
+        ).prefetch_related(
+            'selected_patterns__time_slots',
+            'selected_patterns__time_slots__educator'
+        )
+
+        timetable = []
+
+        for enrollment in enrollments:
+            for pattern in enrollment.selected_patterns.all():
+                for time_slot in pattern.time_slots.all():
+                    timetable.append({
+                        'courseCode': enrollment.registration.course.courseCode,
+                        'patternName': pattern.pattern_name,
+                        'start': time_slot.start_period,
+                        'end': time_slot.end_period,
+                        'educator': time_slot.educator.nameEn,
+                        'location': time_slot.location
+                    })
+
+
+        response = {
+            'studentId': student.studentId,
+            'studentName': student.nameEn,
+            'academicYear': global_settings.current_academic_year,
+            'semester': global_settings.current_semester,
+            'timetable': timetable
+        }
+
+        return Response(response, status=status.HTTP_200_OK)

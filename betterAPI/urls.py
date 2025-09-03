@@ -3,11 +3,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from . import views
 urlpatterns = [
     
-    # Global Settings URLs
     path('settings/', views.GlobalSettingsView.as_view(), name='global-settings'),
     path('current-semester/', views.GlobalSettingsPublicView.as_view(), name='current-semester-public'),
     
-    # Course URLs
     path('courses/', views.CourseListCreateView.as_view(), name='course-list-create'),
     path('course/<str:pk>/', views.CourseDetailView.as_view(), name='course-detail'),
     
@@ -45,5 +43,7 @@ urlpatterns = [
     path('student/grades/', views.StudentGrades.as_view(), name='student-grades'),
     path('student/current-semester/', views.StudentCurrentSemester.as_view(), name='student-current-semester'),
     path('student/available-registrations/', views.AvailableRegistration.as_view(), name='available-registrations'),
+    path('student/register/', views.StudentRegistrationView.as_view(), name='student-registration'),
+    path('student/timetable/', views.StudentTimetableView.as_view(), name='student-timetable'),
     path('student/<str:pk>/', views.StudentDetailView.as_view(), name='student-detail'),
 ]
