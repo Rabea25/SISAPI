@@ -25,7 +25,9 @@ The system uses a relational database with key entities:
 
 Students select specific patterns when enrolling, creating flexible scheduling while maintaining capacity limits.
 
-## API Endpoints
+## API Overview
+
+> **📖 Complete API Documentation**: See [API.md](API.md) for detailed request/response examples and endpoint specifications.
 
 ### Authentication
 - `POST /auth/login/` - User login with JWT token
