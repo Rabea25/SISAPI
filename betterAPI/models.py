@@ -120,8 +120,14 @@ class Department(models.Model):
 class Educator(models.Model):
     nameAr = models.CharField(max_length=200)
     nameEn = models.CharField(max_length=200)
+    nationality = models.CharField(max_length=100, blank=True, null=True)
     nationalId = models.CharField(max_length=14, unique=True, blank=False, null=False)
     educatorId = models.CharField(max_length=5, unique=True, blank=False, null=False, primary_key=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    homePhone = models.CharField(max_length=15, blank=True, null=True)
+    zipcode = models.CharField(max_length=20, blank=True, null=True)
+    dateOfBirth = models.DateField(blank=True, null=True)
+    degrees = models.TextField(blank=True, default=" ", null=True)
     email = models.EmailField(max_length=254, blank=True, null=True)
     type_choices = [
         ('Teaching Assistant', 'Teaching Assistant'),

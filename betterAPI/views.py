@@ -761,7 +761,7 @@ class StudentTimetableView(generics.RetrieveAPIView):
                         'patternName': pattern.pattern_name,
                         'start': time_slot.start_period,
                         'end': time_slot.end_period,
-                        'educator': time_slot.educator.nameEn,
+                        'educator': time_slot.educator.nameEn if time_slot.educator else None,
                         'location': time_slot.location
                     })
 
@@ -775,3 +775,238 @@ class StudentTimetableView(generics.RetrieveAPIView):
         }
 
         return Response(response, status=status.HTTP_200_OK)
+
+
+class EducatorInfo(generics.GenericAPIView):
+
+    throttle_classes = [UserRateThrottle, AnonRateThrottle]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, *args, **kwargs):
+        educatorId = request.user.username 
+        try:
+            educator = Educator.objects.select_related('department').get(educatorId=educatorId)
+        except Educator.DoesNotExist:
+            return Response({'error': 'Educator not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        data = {
+            'educatorId': educator.educatorId,
+            'nameAr': educator.nameAr,
+            'nameEn': educator.nameEn,
+            'email': educator.email,
+            'phone': educator.phone,
+            'dateOfBirth': educator.dateOfBirth,
+            'address': educator.address,
+            'degrees': educator.degrees,
+            'department': educator.department.nameEn if educator.department else ''
+            
+        }
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class EducatorCoursesView(generics.GenericAPIView):
+    throttle_classes = [UserRateThrottle, AnonRateThrottle]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, *args, **kwargs):
+        educatorId = request.user.username 
+        try:
+            educator = Educator.objects.select_related('department').get(educatorId=educatorId)
+        except Educator.DoesNotExist:
+            return Response({'error': 'Educator not found'}, status=status.HTTP_404_NOT_FOUND)
+        global_settings = GlobalSettings.get_current()
+        
+        # Get all registrations where this educator teaches in the current semester
+        registrations = Registration.objects.filter(
+            patterns__time_slots__educator=educator,
+            enrollments__semester__academicYear__yearName=global_settings.current_academic_year,
+            enrollments__semester__semesterName=global_settings.current_semester
+        ).select_related(
+            'course'
+        ).distinct()
+        
+        courses_data = []
+        for registration in registrations:
+            # Count enrolled students for this registration
+            student_count = Enrollment.objects.filter(
+                registration=registration,
+                semester__academicYear__yearName=global_settings.current_academic_year,
+                semester__semesterName=global_settings.current_semester,
+                selected_patterns__time_slots__educator=educator
+            ).distinct().count()
+            
+            course_data = {
+                'registrationId': registration.id,
+                'courseCode': registration.course.courseCode,
+                'courseName': registration.course.courseName,
+                'credits': registration.course.credits,
+                'groupNumber': registration.group_number,
+                'enrolledStudents': student_count,
+                'capacity': registration.capacity
+            }
+            courses_data.append(course_data)
+        
+        response_data = {
+            'educatorId': educator.educatorId,
+            'educatorName': educator.nameEn,
+            'academicYear': global_settings.current_academic_year,
+            'semester': global_settings.get_current_semester_display(),
+            'courses': courses_data
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+class EducatorCourseInfo(generics.GenericAPIView):
+    """
+    Shows detailed information about a specific course/registration that an educator teaches,
+    including all enrolled students and their grades (if any).
+    """
+    throttle_classes = [UserRateThrottle, AnonRateThrottle]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, registration_id, *args, **kwargs):
+        educatorId = request.user.username
+        
+        try:
+            educator = Educator.objects.get(educatorId=educatorId)
+        except Educator.DoesNotExist:
+            return Response({'error': 'Educator not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            registration = Registration.objects.select_related('course').get(id=registration_id)
+        except Registration.DoesNotExist:
+            return Response({'error': 'Registration not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verify that this educator actually teaches this registration
+        educator_teaches = registration.patterns.filter(
+            time_slots__educator=educator
+        ).exists()
+        
+        if not educator_teaches:
+            return Response({'error': 'You are not authorized to view this course'}, status=status.HTTP_403_FORBIDDEN)
+        
+        global_settings = GlobalSettings.get_current()
+        
+        # Get all enrollments for this registration in current semester
+        enrollments = Enrollment.objects.filter(
+            registration=registration,
+            semester__academicYear__yearName=global_settings.current_academic_year,
+            semester__semesterName=global_settings.current_semester
+        ).select_related(
+            'student'
+        ).prefetch_related(
+            'selected_patterns__time_slots'
+        )
+        
+        # Filter enrollments to only include students in patterns taught by this educator
+        relevant_enrollments = []
+        for enrollment in enrollments:
+            # Check if student has selected any pattern taught by this educator
+            if enrollment.selected_patterns.filter(time_slots__educator=educator).exists():
+                relevant_enrollments.append(enrollment)
+        
+        students_data = []
+        for enrollment in relevant_enrollments:
+            # Get the patterns this educator teaches for this student
+            educator_patterns = enrollment.selected_patterns.filter(
+                time_slots__educator=educator
+            ).distinct()
+            
+            patterns_info = []
+            for pattern in educator_patterns:
+                patterns_info.append({
+                    'patternName': pattern.pattern_name,
+                    'patternType': pattern.pattern_type
+                })
+            
+            student_data = {
+                'enrollmentId': enrollment.id,
+                'studentId': enrollment.student.studentId,
+                'studentName': enrollment.student.nameEn,
+                'studentNameAr': enrollment.student.nameAr,
+                'level': enrollment.student.level,
+                'department': enrollment.student.department.code,
+                'patterns': patterns_info,
+                # Grade information
+                'letterGrade': enrollment.letterGrade,
+                'numericGrade': float(enrollment.numericGrade) if enrollment.numericGrade else None,
+                'coursework': enrollment.coursework,
+                'courseworkMax': enrollment.courseworkMax,
+                'exam': enrollment.exam,
+                'examMax': enrollment.examMax,
+                'total': enrollment.total,
+                'hasGrade': enrollment.letterGrade is not None and enrollment.letterGrade != ''
+            }
+            students_data.append(student_data)
+        
+        # Sort students by name
+        students_data.sort(key=lambda x: x['studentName'])
+        
+        course_info = {
+            'registrationId': registration.id,
+            'courseCode': registration.course.courseCode,
+            'courseName': registration.course.courseName,
+            'credits': registration.course.credits,
+            'groupNumber': registration.group_number,
+            'capacity': registration.capacity,
+            'level': registration.course.level,
+            'totalEnrolled': len(students_data),
+            'studentsWithGrades': len([s for s in students_data if s['hasGrade']]),
+            'studentsWithoutGrades': len([s for s in students_data if not s['hasGrade']])
+        }
+        
+        response_data = {
+            'educatorId': educator.educatorId,
+            'educatorName': educator.nameEn,
+            'academicYear': global_settings.current_academic_year,
+            'semester': global_settings.get_current_semester_display(),
+            'courseInfo': course_info,
+            'students': students_data
+        }
+        #TODO: add put method to update grades 
+        return Response(response_data, status=status.HTTP_200_OK)
+
+class EducatorTimetableView(generics.GenericAPIView):
+    throttle_classes = [UserRateThrottle, AnonRateThrottle]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, registration_id, *args, **kwargs):
+        educatorId = request.user.username
+        global_settings = GlobalSettings.get_current()
+
+        try:
+            educator = Educator.objects.get(educatorId=educatorId)
+        except Educator.DoesNotExist:
+            return Response({'error': 'Educator not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        time_slots = TimeSlot.objects.filter(
+            educator=educator,
+            pattern__registration__enrollments__semester__academicYear__yearName=global_settings.current_academic_year,
+            pattern__registration__enrollments__semester__semesterName=global_settings.current_semester
+        ).select_related(
+            'pattern__registration__course'
+        ).distinct()
+
+        timetable = []
+        for time_slot in time_slots:
+            timetable.append({
+                'courseCode': time_slot.pattern.registration.course.courseCode,
+                'courseName': time_slot.pattern.registration.course.courseName,
+                'patternName': time_slot.pattern.pattern_name,
+                'patternType': time_slot.pattern.pattern_type,
+                'day': time_slot.day,
+                'start': time_slot.start_period,
+                'end': time_slot.end_period,
+                'location': time_slot.location,
+                'groupNumber': time_slot.pattern.registration.group_number
+            })
+        return Response({
+            'educatorId': educator.educatorId,
+            'educatorName': educator.nameEn,
+            'academicYear': global_settings.current_academic_year,
+            'semester': global_settings.get_current_semester_display(),
+            'timetable': timetable
+        }, status=status.HTTP_200_OK)
+    

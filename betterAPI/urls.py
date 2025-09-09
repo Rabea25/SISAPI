@@ -9,9 +9,6 @@ urlpatterns = [
     path('courses/', views.CourseListCreateView.as_view(), name='course-list-create'),
     path('course/<str:pk>/', views.CourseDetailView.as_view(), name='course-detail'),
     
-    path('educators/', views.EducatorListCreateView.as_view(), name='educator-list-create'),
-    path('educator/<str:pk>/', views.EducatorDetailView.as_view(), name='educator-detail'),
-    
     path('departments/', views.DepartmentListCreateView.as_view(), name='department-list-create'),
     path('department/<str:pk>/', views.DepartmentDetailView.as_view(), name='department-detail'),
     
@@ -46,4 +43,11 @@ urlpatterns = [
     path('student/register/', views.StudentRegistrationView.as_view(), name='student-registration'),
     path('student/timetable/', views.StudentTimetableView.as_view(), name='student-timetable'),
     path('student/<str:pk>/', views.StudentDetailView.as_view(), name='student-detail'),
+    
+    path('educators/', views.EducatorListCreateView.as_view(), name='educator-list-create'),
+    path('educator/info/', views.EducatorInfo.as_view(), name='educator-info'),
+    path('educator/current-courses/', views.EducatorCoursesView.as_view(), name='educator-current-courses'),
+    path('educator/course/<int:registration_id>/', views.EducatorCourseInfo.as_view(), name='educator-course-info'),
+    path('educator/timetable/', views.EducatorTimetableView.as_view(), name='educator-timetable'),
+    path('educator/<str:pk>/', views.EducatorDetailView.as_view(), name='educator-detail'),
 ]
