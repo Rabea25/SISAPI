@@ -7,8 +7,10 @@ REST API for university course registration and academic management.
 - **Course Registration** - Students can register for courses with pattern selection (lectures, labs, tutorials)
 - **Prerequisite Validation** - Automatic checking of course requirements and academic standing
 - **Real-time Capacity Management** - Prevents over-enrollment with immediate feedback
-- **Academic Tracking** - Complete grade management, GPA calculations, and transcripts
+- **Grade Management** - Complete grade entry, automatic letter grade calculation, and GPA tracking
+- **Smart GPA Calculations** - Semester and cumulative GPA with incomplete semester handling
 - **Multi-role Authentication** - Separate interfaces for students, educators, and administrators
+- **Teaching Assistant Controls** - Role-based restrictions for grade entry permissions
 - **Schedule Management** - Dynamic timetable generation with conflict detection
 
 ## Database Structure
@@ -41,7 +43,8 @@ Students select specific patterns when enrolling, creating flexible scheduling w
 ### Educator Operations
 - `GET /educator/info/` - Educator profile information
 - `GET /educator/current-courses/` - List of taught courses this semester
-- `GET /educator/course/{id}/` - Detailed course info with student roster
+- `GET /educator/course/{id}/` - Detailed course view with student roster and grades
+- `PUT /educator/course/{id}/grades/` - Batch update student grades with automatic GPA calculation
 - `GET /educator/timetable/` - Teaching schedule
 
 ### Admin Operations
@@ -82,9 +85,9 @@ python manage.py runserver
 
 The API will be available at `http://localhost:8000/`
 
-## Usage Example
+## Usage Examples
 
-Register a student for courses:
+### Student Course Registration
 ```json
 POST /student/register/
 [
@@ -97,6 +100,54 @@ POST /student/register/
   }
 ]
 ```
+
+### Educator Grade Management
+```json
+PUT /educator/course/123/grades/
+[
+  {
+    "enrollmentId": 456,
+    "coursework": 45,
+    "exam": 42
+  },
+  {
+    "enrollmentId": 789,
+    "coursework": 38,
+    "exam": 44
+  }
+]
+```
+
+**Response:**
+```json
+{
+  "successful": [
+    {
+      "enrollmentId": 456,
+      "studentName": "Alice Johnson",
+      "letterGrade": "A-",
+      "semesterGPA": 3.2,
+      "cumulativeGPA": 3.4
+    }
+  ],
+  "failed": [],
+  "message": "Updated 2 students successfully"
+}
+```
+
+## Key Features
+
+### Intelligent GPA System
+- **Automatic Letter Grade Assignment** - Converts numeric scores to letter grades (A+ to F)
+- **Smart Semester Handling** - Incomplete semesters show 0.0 GPA and don't affect cumulative GPA
+- **Role-Based Grade Entry** - Teaching Assistants restricted from entering final exam grades
+- **Real-time Calculations** - GPA updates immediately when grades are entered
+
+### Academic Business Logic
+- **Prerequisite Enforcement** - Students can only register for courses they're eligible for
+- **Capacity Management** - Real-time enrollment limits with pattern-specific restrictions
+- **Schedule Conflict Prevention** - Automatic detection of time slot overlaps
+- **Department Access Control** - Students access courses from their department plus general education
 
 ---
 

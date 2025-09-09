@@ -107,6 +107,79 @@ class Semester(models.Model):
 
     def __str__(self):
         return f"{self.academicYear} - {self.get_semesterName_display()}"
+    
+    def calculate_gpa(self, student):
+        """Calculate semester GPA for a specific student"""
+        enrollments = self.enrollments.filter(
+            student=student,
+            letterGrade__isnull=False
+        ).exclude(letterGrade='')
+        
+        if not enrollments:
+            return 0.0
+            
+        total_points = 0
+        total_credits = 0
+        
+        for enrollment in enrollments:
+            grade_points = self.get_grade_points(enrollment.letterGrade)
+            if grade_points is None:  # Invalid grade
+                continue
+                
+            credits = enrollment.registration.course.credits
+            total_points += grade_points * credits
+            total_credits += credits
+        
+        return round(total_points / total_credits, 2) if total_credits > 0 else 0.0
+    
+    def calculate_cgpa(self, student):
+        """Calculate cumulative GPA across all semesters for a student"""
+        # Get all previous semesters for this student with non-zero GPA
+        all_semesters = Semester.objects.filter(
+            academicYear__student=student,
+            gpa__gt=0
+        ).order_by('academicYear__yearName', 'semesterName')
+        
+        if not all_semesters:
+            return 0.0
+            
+        total_points = 0
+        total_credits = 0
+        
+        for semester in all_semesters:
+            semester_enrollments = semester.enrollments.filter(
+                student=student,
+                letterGrade__isnull=False
+            ).exclude(letterGrade='')
+            
+            for enrollment in semester_enrollments:
+                grade_points = self.get_grade_points(enrollment.letterGrade)
+                if grade_points is not None:
+                    credits = enrollment.registration.course.credits
+                    total_points += grade_points * credits
+                    total_credits += credits
+        
+        return round(total_points / total_credits, 2) if total_credits > 0 else 0.0
+    
+    @staticmethod
+    def get_grade_points(letter_grade):
+        """Convert letter grade to points (4.0 scale)"""
+        grade_map = {
+            'A+': 4.0, 'A': 4.0, 'A-': 3.7,
+            'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+            'C+': 2.3, 'C': 2.0, 'C-': 1.7,
+            'D+': 1.3, 'D': 1.0, 'D-': 0.7,
+            'F': 0.0
+        }
+        return grade_map.get(letter_grade)
+    
+    def is_complete_semester(self, student):
+        """Check if all courses in semester have grades assigned"""
+        enrollments = self.enrollments.filter(student=student)
+        return all(
+            enrollment.letterGrade and enrollment.letterGrade.strip()
+            for enrollment in enrollments
+        )
 
 class Department(models.Model):
     name = models.CharField(max_length=100, unique=True, blank=False, null=False)
@@ -245,6 +318,48 @@ class Enrollment(models.Model):
 
     def __str__(self):
         return f"{self.student.nameEn} - {self.registration.course.courseCode}"
+    
+    def calculate_total_and_grade(self):
+        """Calculate total score and assign letter grade"""
+        if self.coursework is None or self.exam is None:
+            return
+            
+        self.total = (self.coursework or 0) + (self.exam or 0)
+        
+        # Calculate percentage
+        max_total = (self.courseworkMax or 50) + (self.examMax or 50)
+        percentage = (self.total / max_total) * 100 if max_total > 0 else 0
+        
+        # Assign letter grade based on percentage
+        if percentage >= 95:
+            self.letterGrade = 'A+'
+        elif percentage >= 90:
+            self.letterGrade = 'A'
+        elif percentage >= 85:
+            self.letterGrade = 'A-'
+        elif percentage >= 80:
+            self.letterGrade = 'B+'
+        elif percentage >= 75:
+            self.letterGrade = 'B'
+        elif percentage >= 70:
+            self.letterGrade = 'B-'
+        elif percentage >= 65:
+            self.letterGrade = 'C+'
+        elif percentage >= 60:
+            self.letterGrade = 'C'
+        elif percentage >= 55:
+            self.letterGrade = 'C-'
+        elif percentage >= 50:
+            self.letterGrade = 'D+'
+        elif percentage >= 45:
+            self.letterGrade = 'D'
+        elif percentage >= 40:
+            self.letterGrade = 'D-'
+        else:
+            self.letterGrade = 'F'
+            
+        # Calculate numeric grade (percentage)
+        self.numericGrade = round(percentage, 2)
     
     def get_all_time_slots(self):
         """Returns all time slots for this enrollment's selected patterns."""

@@ -48,6 +48,7 @@ urlpatterns = [
     path('educator/info/', views.EducatorInfo.as_view(), name='educator-info'),
     path('educator/current-courses/', views.EducatorCoursesView.as_view(), name='educator-current-courses'),
     path('educator/course/<int:registration_id>/', views.EducatorCourseInfo.as_view(), name='educator-course-info'),
+    path('educator/course/<int:registration_id>/grades/', views.EducatorUpdateGrades.as_view(), name='educator-update-grades'),
     path('educator/timetable/', views.EducatorTimetableView.as_view(), name='educator-timetable'),
     path('educator/<str:pk>/', views.EducatorDetailView.as_view(), name='educator-detail'),
 ]

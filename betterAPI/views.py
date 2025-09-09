@@ -965,8 +965,137 @@ class EducatorCourseInfo(generics.GenericAPIView):
             'courseInfo': course_info,
             'students': students_data
         }
-        #TODO: add put method to update grades 
+        
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class EducatorUpdateGrades(generics.GenericAPIView):
+    """
+    Allows educators to update student grades for a specific course.
+    Handles batch updates and automatic GPA recalculation.
+    """
+    throttle_classes = [UserRateThrottle, AnonRateThrottle]
+    permission_classes = [IsAuthenticated]
+    
+    def put(self, request, registration_id, *args, **kwargs):
+        educatorId = request.user.username
+        
+        try:
+            educator = Educator.objects.get(educatorId=educatorId)
+        except Educator.DoesNotExist:
+            return Response({'error': 'Educator not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            registration = Registration.objects.get(id=registration_id)
+        except Registration.DoesNotExist:
+            return Response({'error': 'Registration not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verify educator teaches this registration
+        if not registration.patterns.filter(time_slots__educator=educator).exists():
+            return Response({'error': 'You are not authorized to grade this course'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if educator is TA trying to update final grades
+        if educator.type == 'Teaching Assistant':
+            grade_updates = request.data
+            for update in grade_updates:
+                if 'exam' in update and update.get('exam') is not None:
+                    return Response({'error': 'Teaching Assistants cannot update final exam grades'}, status=status.HTTP_403_FORBIDDEN)
+        
+        successful_updates = []
+        failed_updates = []
+        
+        # Process each grade update
+        from django.db import transaction
+        
+        try:
+            with transaction.atomic():
+                for update_data in request.data:
+                    try:
+                        result = self.process_grade_update(educator, registration, update_data)
+                        successful_updates.append(result)
+                    except Exception as e:
+                        failed_updates.append({
+                            'enrollmentId': update_data.get('enrollmentId'),
+                            'error': str(e)
+                        })
+                
+                # If any failed, rollback all changes
+                if failed_updates:
+                    raise Exception("Some updates failed")
+                    
+        except Exception:
+            # Transaction was rolled back
+            pass
+        
+        return Response({
+            'successful': successful_updates,
+            'failed': failed_updates,
+            'message': f'Updated {len(successful_updates)} students successfully'
+        }, status=status.HTTP_200_OK)
+    
+    def process_grade_update(self, educator, registration, update_data):
+        """Process a single student's grade update"""
+        enrollment_id = update_data.get('enrollmentId')
+        
+        try:
+            enrollment = Enrollment.objects.select_related(
+                'student', 'semester__academicYear'
+            ).get(
+                id=enrollment_id,
+                registration=registration
+            )
+        except Enrollment.DoesNotExist:
+            raise Exception("Enrollment not found")
+        
+        # Verify this student is in educator's patterns
+        if not enrollment.selected_patterns.filter(time_slots__educator=educator).exists():
+            raise Exception("You don't teach this student")
+        
+        # Update grade fields
+        if 'coursework' in update_data:
+            coursework = update_data['coursework']
+            if coursework is not None and (coursework < 0 or coursework > (enrollment.courseworkMax or 50)):
+                raise Exception(f"Coursework must be between 0 and {enrollment.courseworkMax}")
+            enrollment.coursework = coursework
+            
+        if 'exam' in update_data:
+            exam = update_data['exam']
+            if exam is not None and (exam < 0 or exam > (enrollment.examMax or 50)):
+                raise Exception(f"Exam must be between 0 and {enrollment.examMax}")
+            enrollment.exam = exam
+        
+        # Calculate total and letter grade
+        enrollment.calculate_total_and_grade()
+        enrollment.save()
+        
+        # Recalculate semester GPA
+        semester = enrollment.semester
+        new_gpa = semester.calculate_gpa(enrollment.student)
+        
+        # Only update semester GPA if all courses are complete
+        if semester.is_complete_semester(enrollment.student):
+            semester.gpa = new_gpa
+            # Calculate and update CGPA
+            semester.cgpa = semester.calculate_cgpa(enrollment.student)
+        else:
+            # Incomplete semester - set GPA to 0
+            semester.gpa = 0.0
+            # Don't update CGPA for incomplete semesters
+            
+        semester.save()
+        
+        return {
+            'enrollmentId': enrollment.id,
+            'studentId': enrollment.student.studentId,
+            'studentName': enrollment.student.nameEn,
+            'coursework': enrollment.coursework,
+            'exam': enrollment.exam,
+            'total': enrollment.total,
+            'letterGrade': enrollment.letterGrade,
+            'numericGrade': float(enrollment.numericGrade) if enrollment.numericGrade else 0.0,
+            'semesterGPA': float(semester.gpa) if semester.gpa else 0.0,
+            'cumulativeGPA': float(semester.cgpa) if semester.cgpa else 0.0
+        }
 
 class EducatorTimetableView(generics.GenericAPIView):
     throttle_classes = [UserRateThrottle, AnonRateThrottle]
