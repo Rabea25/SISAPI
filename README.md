@@ -59,7 +59,7 @@ Students select specific patterns when enrolling, creating flexible scheduling w
 
 ### Prerequisites
 - Python 3.8+
-- pip
+- pipenv
 
 ### Installation
 
@@ -71,16 +71,21 @@ cd SISAPI
 
 2. Install dependencies
 ```bash
-pip install -r requirements.txt
+pipenv install
 ```
 
-3. Set up database
+3. Activate virtual environment
+```bash
+pipenv shell
+```
+
+4. Set up database
 ```bash
 python manage.py migrate
 python manage.py createsuperuser
 ```
 
-4. Run the server
+5. Run the server
 ```bash
 python manage.py runserver
 ```
